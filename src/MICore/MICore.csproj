@@ -182,7 +182,6 @@
   <Import Condition="'$(IsCoreClr)' == 'false'" Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\..\build\miengine.targets" />
 
-  <Import Project="UpdateXmlSerializersCode.targets" />
   <Import Project="GenerateXmlSerializersAssembly.targets" />
 
   <!-- To get the seralization assembly copied to the vsix, and also to the output directory, we have this target

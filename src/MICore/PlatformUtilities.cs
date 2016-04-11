@@ -43,16 +43,18 @@ namespace MICore
                 if (uname(buf) == 0)
                 {
                     string os = Marshal.PtrToStringAnsi(buf);
-                    switch (os)
+                    if (String.Equals(os, "Darwin", StringComparison.Ordinal))
                     {
-                        case "Darwin":
-                            return RuntimePlatform.MacOSX;
+                        return RuntimePlatform.MacOSX;
                     }
                 }
             }
             finally
             {
-                Marshal.FreeHGlobal(buf);
+                if (buf != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(buf);
+                }
             }
 
             return RuntimePlatform.Unix;
@@ -76,15 +78,17 @@ namespace MICore
             }
             return RuntimePlatform.Unknown;
 #else
+            const PlatformID MonoOldUnix = (PlatformID)128;
+
             switch (Environment.OSVersion.Platform)
             {
                 case PlatformID.Win32NT:
                     return RuntimePlatform.Windows;
                 case PlatformID.Unix:
-                    // Mono returns PlatformID.Unix on OSX
+                case MonoOldUnix:
+                    // Mono returns PlatformID.Unix on OSX for compatibility
                     return PlatformUtilities.GetUnixVariant();
                 case PlatformID.MacOSX:
-                case ((PlatformID)128):
                     return RuntimePlatform.MacOSX;
                 default:
                     return RuntimePlatform.Unknown;
@@ -122,7 +126,7 @@ namespace MICore
 #if CORECLR
             processStartInfo.Environment[key] = value;
 #else
-            // Desktop CLR has the Environment property in 4.6+, but Mono is currenlty based on 4.5.
+            // Desktop CLR has the Environment property in 4.6+, but Mono is currently based on 4.5.
             processStartInfo.EnvironmentVariables[key] = value;
 #endif
         }

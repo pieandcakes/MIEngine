@@ -16,7 +16,7 @@
 	
 	<!--Don't run unit tests for lab builds (or Desktop builds, yet) -->
 	<TargetsToRun>Build;Test</TargetsToRun>
-	<TargetsToRun Condition="$(Configuration.Contains('Lab')) OR $(Configuration.Contains('Desktop'))">Build</TargetsToRun>
+	<TargetsToRun Condition="'$(Lab)' == 'true' OR $(Configuration.Contains('Desktop'))">Build</TargetsToRun>
   </PropertyGroup>
 
   <ItemGroup>
