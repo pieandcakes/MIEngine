@@ -170,7 +170,7 @@ namespace MICore
             // What that means is the names are backwards wrt miengine hence the reader
             // being the writer and vice-versa
             // Mono seems to hang when the debugger sends a large response unless we specify a larger buffer here
-            writer = new StreamWriter(gdbStdInStream, Encoding.UTF8, 1024 * 4);
+            writer = new StreamWriter(gdbStdInStream, new UTF8Encoding(false, true), 1024 * 4);
             reader = new StreamReader(gdbStdOutStream, Encoding.UTF8, true, 1024 * 4);
         }
 
