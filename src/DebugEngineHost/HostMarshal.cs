@@ -101,5 +101,17 @@ namespace Microsoft.DebugEngineHost
         {
             return new VSImpl.VSEventCallbackWrapper(ad7Callback);
         }
+
+        /// <summary>
+        /// Releases reference to document position.
+        /// </summary>
+        public static void ReleaseDocumentPositionId(IntPtr documentPositionId)
+        { }
+
+        /// <summary>
+        /// Releases reference to function position.
+        /// </summary>
+        public static void ReleaseFunctionPositionId(IntPtr functionPositionId)
+        { }
     }
 }

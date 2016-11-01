@@ -66,6 +66,23 @@ namespace Microsoft.MIDebugEngine
             _BPError = null;
         }
 
+        ~AD7PendingBreakpoint()
+        {
+            switch (_bpRequestInfo.bpLocation.bpLocationType)
+            {
+                case (uint)enum_BP_LOCATION_TYPE.BPLT_CODE_FILE_LINE:
+                    {
+                        HostMarshal.ReleaseDocumentPositionId(_bpRequestInfo.bpLocation.unionmember2);
+                        break;
+                    }
+                case (uint)enum_BP_LOCATION_TYPE.BPLT_CODE_FUNC_OFFSET:
+                    {
+                        HostMarshal.ReleaseFunctionPositionId(_bpRequestInfo.bpLocation.unionmember2);
+                        break;
+                    }
+            }
+        }
+
         private bool VerifyCondition(BP_CONDITION request)
         {
             switch (request.styleCondition)
