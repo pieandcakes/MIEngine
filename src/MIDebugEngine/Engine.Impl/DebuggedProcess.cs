@@ -169,10 +169,10 @@ namespace Microsoft.MIDebugEngine
             {
                 LocalLaunchOptions localLaunchOptions = (LocalLaunchOptions)_launchOptions;
 
-                if (!localLaunchOptions.IsValidMiDebuggerPath())
-                {
-                    throw new Exception(MICoreResources.Error_InvalidMiDebuggerPath);
-                }
+                //if (!localLaunchOptions.IsValidMiDebuggerPath())
+                //{
+                //    throw new Exception(MICoreResources.Error_InvalidMiDebuggerPath);
+                //}
 
                 if (PlatformUtilities.IsOSX() &&
                     localLaunchOptions.DebuggerMIMode != MIMode.Clrdbg &&
@@ -673,8 +673,8 @@ namespace Microsoft.MIDebugEngine
 
                     if (!string.IsNullOrWhiteSpace(_launchOptions.WorkingDirectory))
                     {
-                        string escappedDir = EscapePath(_launchOptions.WorkingDirectory);
-                        commands.Add(new LaunchCommand("-environment-cd " + escappedDir));
+                        //string escappedDir = EscapePath(_launchOptions.WorkingDirectory);
+                        commands.Add(new LaunchCommand("-environment-cd " + _launchOptions.WorkingDirectory.Replace('\\','/')));
                     }
 
                     // TODO: The last clause for LLDB may need to be changed when we support LLDB on Linux

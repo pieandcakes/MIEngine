@@ -10,6 +10,7 @@ using System.IO;
 using System.Collections.Specialized;
 using System.Collections;
 using System.Runtime.InteropServices;
+using System.Globalization;
 
 namespace MICore
 {
@@ -19,27 +20,34 @@ namespace MICore
         {
         }
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool Wow64DisableWow64FsRedirection(ref IntPtr ptr);
+
         public override void InitStreams(LaunchOptions options, out StreamReader reader, out StreamWriter writer)
         {
+            IntPtr ptr = IntPtr.Zero;
+            Wow64DisableWow64FsRedirection(ref ptr);
+
             LocalLaunchOptions localOptions = (LocalLaunchOptions)options;
             string miDebuggerDir = System.IO.Path.GetDirectoryName(localOptions.MIDebuggerPath);
 
             Process proc = new Process();
-            proc.StartInfo.FileName = localOptions.MIDebuggerPath;
-            proc.StartInfo.Arguments = "--interpreter=mi";
+            proc.StartInfo.FileName = Environment.ExpandEnvironmentVariables(@"c:\windows\system32\bash.exe");
+            proc.StartInfo.Arguments = string.Format(CultureInfo.InvariantCulture, "-ic \"{0} --interpreter=mi\"", localOptions.MIDebuggerPath);
 
             // LLDB has the -environment-cd mi command that is used to set the working dir for gdb/clrdbg, but it doesn't work.
             // So, set lldb's working dir to the user's requested folder before launch.
-            proc.StartInfo.WorkingDirectory = options.DebuggerMIMode == MIMode.Lldb ? options.WorkingDirectory : miDebuggerDir;
+            proc.StartInfo.WorkingDirectory = @"c:\windows\system32";
+            //proc.StartInfo.WorkingDirectory = options.DebuggerMIMode == MIMode.Lldb ? options.WorkingDirectory : miDebuggerDir;
 
             // On Windows, GDB locally requires that the directory be on the PATH, being the working directory isn't good enough
-            if (PlatformUtilities.IsWindows() &&
-                options.DebuggerMIMode == MIMode.Gdb)
-            {
-                string path = proc.StartInfo.GetEnvironmentVariable("PATH");
-                path = (string.IsNullOrEmpty(path) ? miDebuggerDir : path + ";" + miDebuggerDir);
-                proc.StartInfo.SetEnvironmentVariable("PATH", path);
-            }
+            //if (PlatformUtilities.IsWindows() &&
+            //    options.DebuggerMIMode == MIMode.Gdb)
+            //{
+            //    string path = proc.StartInfo.GetEnvironmentVariable("PATH");
+            //    path = (string.IsNullOrEmpty(path) ? miDebuggerDir : path + ";" + miDebuggerDir);
+            //    proc.StartInfo.SetEnvironmentVariable("PATH", path);
+            //}
 
             // Only pass the environment to launch clrdbg. For other modes, there are commands that set the environment variables
             // directly for the debuggee.

@@ -187,10 +187,10 @@ namespace Microsoft.MIDebugPackage
 
             if (checkExecutableExists)
             {
-                if (!File.Exists(executable))
-                {
-                    throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, "Executable '{0}' does not exist", executable));
-                }
+                //if (!File.Exists(executable))
+                //{
+                //    throw new ArgumentException(string.Format(CultureInfo.CurrentCulture, "Executable '{0}' does not exist", executable));
+                //}
 
                 executable = Path.GetFullPath(executable);
             }
