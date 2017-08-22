@@ -1282,7 +1282,7 @@ namespace MICore
                     )
                 {
                     // mingw enters break mode with no status flags on the mi response during attach.
-                    // In order to keey the entrypoint state correct, set it to true and continue
+                    // In order to key the entrypoint state correct, set it to true and continue
                     // the break.
                     this.EntrypointHit = true;
                     CmdContinueAsync();

@@ -725,7 +725,7 @@ namespace Microsoft.MIDebugEngine
                     {
                         commands.Add(new LaunchCommand("-exec-arguments " + _launchOptions.ExeArguments));
                     }
-                    
+
                     Func<string, Task> breakMainSuccessHandler = (string bkptResult) =>
                     {
                         int index = bkptResult.IndexOf("number=", StringComparison.Ordinal);
@@ -748,8 +748,11 @@ namespace Microsoft.MIDebugEngine
                         return Task.FromResult(0);
                     };
 
-                    commands.Add(new LaunchCommand("-break-insert main", ignoreFailures: true, successHandler: breakMainSuccessHandler));
-                    
+                    if (!this.EntrypointHit)
+                    {
+                        commands.Add(new LaunchCommand("-break-insert main", ignoreFailures: true, successHandler: breakMainSuccessHandler));
+                    }
+
                     if (null != localLaunchOptions)
                     {
                         string destination = localLaunchOptions.MIDebuggerServerAddress;
@@ -1045,7 +1048,6 @@ namespace Microsoft.MIDebugEngine
             }
             else if (reason == "entry-point-hit")
             {
-                this.EntrypointHit = true;
                 this.OnEntrypointHit();
                 _callback.OnEntryPoint(thread);
             }
@@ -1058,7 +1060,7 @@ namespace Microsoft.MIDebugEngine
                 TupleValue frame = results.Results.TryFind<TupleValue>("frame");
                 AD7BoundBreakpoint[] bkpt = _breakpointManager.FindHitBreakpoints(bkptno, addr, frame, out fContinue);
 
-                 if (bkpt != null)
+                if (bkpt != null)
                 {
                     if (frame != null && addr != 0)
                     {
@@ -1072,17 +1074,36 @@ namespace Microsoft.MIDebugEngine
                     if (!this.EntrypointHit)
                     {
                         // Hitting a bp before the entrypoint overrules entrypoint processing.
-                        this.EntrypointHit = true;
                         this.OnEntrypointHit();
+                    }
+
+                    if (this._deleteEntryPointBreakpoint)
+                    {
+                        this.DeleteEntryPointBreakpoint();
                     }
 
                     List<object> bplist = new List<object>();
                     bplist.AddRange(bkpt);
                     _callback.OnBreakpoint(thread, bplist.AsReadOnly());
                 }
+                else if (this._deleteEntryPointBreakpoint &&
+                    !String.IsNullOrWhiteSpace(this._entryPointBreakpoint) &&
+                    this._entryPointBreakpoint.Equals(bkptno, StringComparison.Ordinal))
+                {
+                    // We hit our `-break-insert main` breakpoint. This may get hit after entrypointHit has been set, so delete it and continue.
+                    breakRequest = BreakRequest.None;
+                    this.DeleteEntryPointBreakpoint();
+
+                    if (!this.EntrypointHit)
+                    {
+                        this.OnEntrypointHit();
+                        _callback.OnEntryPoint(thread);
+                    }
+
+                    CmdContinueAsync();
+                }
                 else if (!this.EntrypointHit)
                 {
-                    this.EntrypointHit = true;
                     this.OnEntrypointHit();
 
                     _callback.OnEntryPoint(thread);
@@ -1210,6 +1231,15 @@ namespace Microsoft.MIDebugEngine
             }
         }
 
+        private async void DeleteEntryPointBreakpoint()
+        {
+            if (this._deleteEntryPointBreakpoint && !String.IsNullOrWhiteSpace(this._entryPointBreakpoint))
+            {
+                await MICommandFactory.BreakDelete(this._entryPointBreakpoint);
+                this._deleteEntryPointBreakpoint = false;
+            }
+        }
+
         /// <summary>
         /// Tasks to run when the entry point is hit.
         /// </summary>
@@ -1223,11 +1253,8 @@ namespace Microsoft.MIDebugEngine
                 await ConsoleCmdAsync("process handle --pass true --stop false --notify false SIGHUP", true);
             }
 
-            if(this._deleteEntryPointBreakpoint && !String.IsNullOrWhiteSpace(this._entryPointBreakpoint))
-            {
-                await MICommandFactory.BreakDelete(this._entryPointBreakpoint);
-                this._deleteEntryPointBreakpoint = false;
-            }
+            this.DeleteEntryPointBreakpoint();
+            this.EntrypointHit = true;
         }
 
         private static bool IsExternalBreakRequest(BreakRequest breakRequest)
