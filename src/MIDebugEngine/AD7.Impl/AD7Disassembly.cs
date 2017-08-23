@@ -27,6 +27,7 @@ namespace Microsoft.MIDebugEngine
 
         public int GetCodeContext(ulong uCodeLocationId, out IDebugCodeContext2 ppCodeContext)
         {
+            // Update to not pass null for last parameter.
             ppCodeContext = new AD7MemoryAddress(_engine, uCodeLocationId, null);
             return Constants.S_OK;
         }
@@ -94,6 +95,8 @@ namespace Microsoft.MIDebugEngine
 
         public int Read(uint dwInstructions, enum_DISASSEMBLY_STREAM_FIELDS dwFields, out uint pdwInstructionsRead, DisassemblyData[] prgDisassembly)
         {
+
+            // To Fix "Go to source code" : Need to pass back dwFlag of Document changed(1) to get VS to ask for document and then in GetCodeContext for AD7MemoryAddress, don't pass null. 
             uint iOp = 0;
 
             IEnumerable<DisasmInstruction> instructions = null;
