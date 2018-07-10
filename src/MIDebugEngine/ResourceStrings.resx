@@ -253,4 +253,7 @@ See https://aka.ms/miengine-gdb-troubleshooting for details.</value>
   <data name="DebuggingWillAbort" xml:space="preserve">
     <value>Debugging will now abort.</value>
   </data>
+  <data name="InvalidFrame" xml:space="preserve">
+    <value>Attempting to operate against an invalid frame.</value>
+  </data>
 </root>

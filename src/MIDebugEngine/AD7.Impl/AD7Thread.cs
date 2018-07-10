@@ -119,15 +119,15 @@ namespace Microsoft.MIDebugEngine
                 int numStackFrames = stackFrames != null ? stackFrames.Count : 0;
                 FRAMEINFO[] frameInfoArray;
 
-                if (numStackFrames == 0)
+                if (numStackFrames == 0 || !(stackFrames[0].Level.HasValue && stackFrames[stackFrames.Count - 1].Level.HasValue))
                 {
                     // failed to walk any frames. Return an empty stack.
                     frameInfoArray = new FRAMEINFO[0];
                 }
                 else
                 {
-                    uint low = stackFrames[0].Level;
-                    uint high = stackFrames[stackFrames.Count - 1].Level;
+                    uint low = stackFrames[0].Level.Value;
+                    uint high = stackFrames[stackFrames.Count - 1].Level.Value;
                     FilterUnknownFrames(stackFrames);
                     numStackFrames = stackFrames.Count;
                     frameInfoArray = new FRAMEINFO[numStackFrames];
@@ -141,7 +141,7 @@ namespace Microsoft.MIDebugEngine
 
                     for (int i = 0; i < numStackFrames; i++)
                     {
-                        var p = parameters != null ? parameters.Find((ArgumentList t) => t.Item1 == stackFrames[i].Level) : null;
+                        var p = (parameters != null && stackFrames[i].Level.HasValue) ? parameters.Find((ArgumentList t) => t.Item1 == stackFrames[i].Level.Value) : null;
                         AD7StackFrame frame = new AD7StackFrame(_engine, this, stackFrames[i]);
                         frame.SetFrameInfo(dwFieldSpec, out frameInfoArray[i], p != null ? p.Item2 : null);
                     }
@@ -166,7 +166,7 @@ namespace Microsoft.MIDebugEngine
             for (int i = 0; i < stackFrames.Count;)
             {
                 // replace sequences of "??" with one UnknownCode frame
-                if (stackFrames[i].Function == null || stackFrames[i].Function.Equals("??", StringComparison.Ordinal))
+                if ((stackFrames[i].Function == null || stackFrames[i].Function.Equals("??", StringComparison.Ordinal)) && stackFrames[i].Level.HasValue)
                 {
                     if (lastWasQuestion)
                     {
@@ -279,7 +279,7 @@ namespace Microsoft.MIDebugEngine
             // CLRDBG TODO: This implementation should be changed to call an MI command
             ulong addr = ((AD7MemoryAddress)codeContext).Address;
             AD7StackFrame frame = ((AD7StackFrame)stackFrame);
-            if (frame.ThreadContext.Level != 0 || frame.Thread != this || !frame.ThreadContext.pc.HasValue || _engine.DebuggedProcess.MICommandFactory.Mode == MIMode.Clrdbg)
+            if (!frame.ThreadContext.Level.HasValue || frame.ThreadContext.Level.Value != 0 || frame.Thread != this || !frame.ThreadContext.pc.HasValue || _engine.DebuggedProcess.MICommandFactory.Mode == MIMode.Clrdbg)
             {
                 return Constants.S_FALSE;
             }

@@ -12,7 +12,7 @@ namespace Microsoft.MIDebugEngine
 {
     internal class ThreadContext
     {
-        public ThreadContext(ulong? addr, MITextPosition textPosition, string function, uint level, string from)
+        public ThreadContext(ulong? addr, MITextPosition textPosition, string function, uint? level, string from)
         {
             pc = addr;
             sp = 0;
@@ -32,7 +32,7 @@ namespace Microsoft.MIDebugEngine
 
         public string From { get; private set; }
 
-        public uint Level { get; private set; }
+        public uint? Level { get; private set; }
 
         /// <summary>
         /// Finds the module for this context

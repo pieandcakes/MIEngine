@@ -359,7 +359,7 @@ namespace Microsoft.MIDebugEngine
             Tuple<int, string>[] values = null;
             Engine.DebuggedProcess.WorkerThread.RunOperation(async () =>
             {
-                values = await Engine.DebuggedProcess.GetRegisters(Thread.GetDebuggedThread().Id, ThreadContext.Level);
+                values = await Engine.DebuggedProcess.GetRegisters(Thread.GetDebuggedThread().Id);
             });
             int i = 0;
             foreach (var grp in registerGroups)
@@ -374,10 +374,13 @@ namespace Microsoft.MIDebugEngine
         public string EvaluateExpression(string expr)
         {
             string val = null;
-            Engine.DebuggedProcess.WorkerThread.RunOperation(async () =>
+            if (ThreadContext.Level.HasValue)
             {
-                val = await Engine.DebuggedProcess.MICommandFactory.DataEvaluateExpression(expr, Thread.Id, ThreadContext.Level);
-            });
+                Engine.DebuggedProcess.WorkerThread.RunOperation(async () =>
+                {
+                    val = await Engine.DebuggedProcess.MICommandFactory.DataEvaluateExpression(expr, Thread.Id, ThreadContext.Level.Value);
+                });
+            }
             return val;
         }
 

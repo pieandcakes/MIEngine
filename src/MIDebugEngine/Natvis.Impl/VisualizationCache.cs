@@ -21,7 +21,7 @@ namespace Microsoft.MIDebugEngine.Natvis
             {
                 _name = variable.FullName();
                 _threadId = variable.Client.Id;
-                _level = (int)variable.ThreadContext.Level;
+                _level = variable.ThreadContext.Level.HasValue ? (int)variable.ThreadContext.Level.Value : -1;
             }
 
             public VisualizerKey(string name, int threadId, int level)

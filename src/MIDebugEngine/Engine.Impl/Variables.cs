@@ -413,11 +413,14 @@ namespace Microsoft.MIDebugEngine
             this.VerifyNotDisposed();
 
             string val = null;
-            Task eval = Task.Run(async () =>
+            if (_ctx.Level.HasValue)
             {
-                val = await _engine.DebuggedProcess.MICommandFactory.DataEvaluateExpression(expr, Client.GetDebuggedThread().Id, _ctx.Level);
-            });
-            eval.Wait();
+                Task eval = Task.Run(async () =>
+                {
+                    val = await _engine.DebuggedProcess.MICommandFactory.DataEvaluateExpression(expr, Client.GetDebuggedThread().Id, _ctx.Level.Value);
+                });
+                eval.Wait();
+            }
             return val;
         }
 
@@ -462,8 +465,14 @@ namespace Microsoft.MIDebugEngine
             }
             else
             {
+                if (!_ctx.Level.HasValue)
+                {
+                    SetAsError(string.Format(ResourceStrings.Failed_ExecCommandError, ResourceStrings.InvalidFrame));
+                    return;
+                }
+
                 int threadId = Client.GetDebuggedThread().Id;
-                uint frameLevel = _ctx.Level;
+                uint frameLevel = _ctx.Level.Value;
                 Results results = await _engine.DebuggedProcess.MICommandFactory.VarCreate(_strippedName, threadId, frameLevel, dwFlags, ResultClass.None);
 
                 if (results.ResultClass == ResultClass.done)
@@ -720,14 +729,17 @@ namespace Microsoft.MIDebugEngine
         {
             this.VerifyNotDisposed();
 
-            _engine.DebuggedProcess.WorkerThread.RunOperation(async () =>
+            if (_ctx.Level.HasValue)
             {
-                int threadId = Client.GetDebuggedThread().Id;
-                uint frameLevel = _ctx.Level;
+                _engine.DebuggedProcess.WorkerThread.RunOperation(async () =>
+                {
+                    int threadId = Client.GetDebuggedThread().Id;
+                    uint frameLevel = _ctx.Level.Value;
 
-                _engine.DebuggedProcess.FlushBreakStateData();
-                Value = await _engine.DebuggedProcess.MICommandFactory.VarAssign(_internalName, expression, threadId, frameLevel);
-            });
+                    _engine.DebuggedProcess.FlushBreakStateData();
+                    Value = await _engine.DebuggedProcess.MICommandFactory.VarAssign(_internalName, expression, threadId, frameLevel);
+                });
+            }
         }
 
         #region IDisposable Implementation

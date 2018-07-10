@@ -1771,15 +1771,18 @@ namespace Microsoft.MIDebugEngine
         {
             List<VariableInformation> variables = new List<VariableInformation>();
 
-            ValueListValue localsAndParameters = await MICommandFactory.StackListVariables(PrintValues.NoValues, thread.Id, ctx.Level);
-
-            foreach (var localOrParamResult in localsAndParameters.Content)
+            if (ctx.Level.HasValue)
             {
-                string name = localOrParamResult.FindString("name");
-                bool isParam = localOrParamResult.TryFindString("arg") == "1";
-                SimpleVariableInformation simpleInfo = new SimpleVariableInformation(name, isParam);
-                VariableInformation vi = await simpleInfo.CreateMIDebuggerVariable(ctx, Engine, thread);
-                variables.Add(vi);
+                ValueListValue localsAndParameters = await MICommandFactory.StackListVariables(PrintValues.NoValues, thread.Id, ctx.Level.Value);
+
+                foreach (var localOrParamResult in localsAndParameters.Content)
+                {
+                    string name = localOrParamResult.FindString("name");
+                    bool isParam = localOrParamResult.TryFindString("arg") == "1";
+                    SimpleVariableInformation simpleInfo = new SimpleVariableInformation(name, isParam);
+                    VariableInformation vi = await simpleInfo.CreateMIDebuggerVariable(ctx, Engine, thread);
+                    variables.Add(vi);
+                }
             }
 
             return variables;
@@ -1790,14 +1793,15 @@ namespace Microsoft.MIDebugEngine
         public async Task<List<SimpleVariableInformation>> GetParameterInfoOnly(AD7Thread thread, ThreadContext ctx)
         {
             List<SimpleVariableInformation> parameters = new List<SimpleVariableInformation>();
-
-            ValueListValue localAndParameters = await MICommandFactory.StackListVariables(PrintValues.SimpleValues, thread.Id, ctx.Level);
-
-            foreach (var results in localAndParameters.Content.Where(r => r.TryFindString("arg") == "1"))
+            if (ctx.Level.HasValue)
             {
-                parameters.Add(new SimpleVariableInformation(results.FindString("name"), /*isParam*/ true, results.FindString("value"), results.FindString("type")));
-            }
+                ValueListValue localAndParameters = await MICommandFactory.StackListVariables(PrintValues.SimpleValues, thread.Id, ctx.Level.Value);
 
+                foreach (var results in localAndParameters.Content.Where(r => r.TryFindString("arg") == "1"))
+                {
+                    parameters.Add(new SimpleVariableInformation(results.FindString("name"), /*isParam*/ true, results.FindString("value"), results.FindString("type")));
+                }
+            }
             return parameters;
         }
 
@@ -2057,7 +2061,7 @@ namespace Microsoft.MIDebugEngine
             return _registerGroups;
         }
 
-        public async Task<Tuple<int, string>[]> GetRegisters(int threadId, uint level)
+        public async Task<Tuple<int, string>[]> GetRegisters(int threadId)
         {
             TupleValue[] values = await MICommandFactory.DataListRegisterValues(threadId);
             Tuple<int, string>[] regValues = new Tuple<int, string>[values.Length];
