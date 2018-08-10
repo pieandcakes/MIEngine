@@ -15,9 +15,18 @@ namespace MICore
     {
         private string _dbgStdInName;
         private string _dbgStdOutName;
+        private string _pidFifo;
+        private FileStream _pidStream;
+        private string _dbgCmdFifo;
         private int _debuggerPid = -1;
         private ProcessMonitor _shellProcessMonitor;
         private CancellationTokenSource _streamReadPidCancellationTokenSource = new CancellationTokenSource();
+        private bool _useExternalConsole;
+
+        public LocalUnixTerminalTransport(bool useExternalConsole) : base()
+        {
+            _useExternalConsole = useExternalConsole;
+        }
 
         public override void InitStreams(LaunchOptions options, out StreamReader reader, out StreamWriter writer)
         {
@@ -39,26 +48,37 @@ namespace MICore
 
             _dbgStdInName = UnixUtilities.MakeFifo(Logger);
             _dbgStdOutName = UnixUtilities.MakeFifo(Logger);
-            string pidFifo = UnixUtilities.MakeFifo(Logger);
+            _pidFifo = UnixUtilities.MakeFifo(Logger);
+            _dbgCmdFifo = Path.Combine(Path.GetTempPath(), UnixUtilities.FifoPrefix + Path.GetRandomFileName());
 
             // Used for testing
             Logger?.WriteLine(string.Concat("TempFile=", _dbgStdInName));
             Logger?.WriteLine(string.Concat("TempFile=", _dbgStdOutName));
-            Logger?.WriteLine(string.Concat("TempFile=", pidFifo));
+            Logger?.WriteLine(string.Concat("TempFile=", _pidFifo));
+            Logger?.WriteLine(string.Concat("TempFile=", _dbgCmdFifo));
 
             // Setup the streams on the fifos as soon as possible.
             FileStream dbgStdInStream = new FileStream(_dbgStdInName, FileMode.Open);
             FileStream dbgStdOutStream = new FileStream(_dbgStdOutName, FileMode.Open);
-            FileStream pidStream = new FileStream(pidFifo, FileMode.Open);
+            _pidStream = new FileStream(_pidFifo, FileMode.Open);
+            FileStream dbgCmdStream = new FileStream(_dbgCmdFifo, FileMode.CreateNew);
 
             string debuggerCmd = UnixUtilities.GetDebuggerCommand(localOptions);
             string launchDebuggerCommand = UnixUtilities.LaunchLocalDebuggerCommand(
                 debuggeeDir,
                 _dbgStdInName,
                 _dbgStdOutName,
-                pidFifo,
+                _pidFifo,
+                _dbgCmdFifo,
                 debuggerCmd,
                 localOptions.GetMiDebuggerArgs());
+
+            using (StreamWriter dbgCmdWriter = new StreamWriter(dbgCmdStream, Encoding.UTF8))
+            {
+                dbgCmdWriter.Write(launchDebuggerCommand);
+                dbgCmdWriter.Flush();
+                dbgCmdWriter.Close();
+            }
 
             // Only pass the environment to launch clrdbg. For other modes, there are commands that set the environment variables
             // directly for the debuggee.
@@ -66,12 +86,22 @@ namespace MICore
                 localOptions.Environment :
                 new ReadOnlyCollection<EnvironmentEntry>(new EnvironmentEntry[] { }); ;
 
-            TerminalLauncher terminal = TerminalLauncher.MakeTerminal("DebuggerTerminal", launchDebuggerCommand, localOptions.Environment);
-            terminal.Launch(debuggeeDir, Logger);
+            TerminalLauncher terminal = TerminalLauncher.MakeTerminal("DebuggerTerminal", _dbgCmdFifo, localOptions.Environment);
+            terminal.Launch(debuggeeDir, _useExternalConsole, ContinueStart, Logger);
+            // The in/out names are confusing in this case as they are relative to gdb.
+            // What that means is the names are backwards wrt miengine hence the reader
+            // being the writer and vice-versa
+            // Mono seems to stop responding when the debugger sends a large response unless we specify a larger buffer here
+            writer = new StreamWriter(dbgStdInStream, new UTF8Encoding(false, true), UnixUtilities.StreamBufferSize);
+            reader = new StreamReader(dbgStdOutStream, Encoding.UTF8, true, UnixUtilities.StreamBufferSize);
+        }
 
-            int shellPid = -1;
+        private void ContinueStart(int? pid)
+        {
+            // We have the pid in the pidfifo already so we can ignore the pid that may/may not be passed back through the protocol.
+            int shellPid;
 
-            using (StreamReader pidReader = new StreamReader(pidStream, Encoding.UTF8, true, UnixUtilities.StreamBufferSize))
+            using (StreamReader pidReader = new StreamReader(_pidStream, Encoding.UTF8, true, UnixUtilities.StreamBufferSize))
             {
                 Task<string> readShellPidTask = pidReader.ReadLineAsync();
                 if (readShellPidTask.Wait(TimeSpan.FromSeconds(10)))
@@ -106,13 +136,6 @@ namespace MICore
                     throw new OperationCanceledException(MICoreResources.Error_LocalUnixTerminalDebuggerInitializationFailed);
                 }
             }
-
-            // The in/out names are confusing in this case as they are relative to gdb.
-            // What that means is the names are backwards wrt miengine hence the reader
-            // being the writer and vice-versa
-            // Mono seems to stop responding when the debugger sends a large response unless we specify a larger buffer here
-            writer = new StreamWriter(dbgStdInStream, new UTF8Encoding(false, true), UnixUtilities.StreamBufferSize);
-            reader = new StreamReader(dbgStdOutStream, Encoding.UTF8, true, UnixUtilities.StreamBufferSize);
         }
 
         private void ShellExited(object sender, EventArgs e)

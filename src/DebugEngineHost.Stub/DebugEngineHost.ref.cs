@@ -197,12 +197,12 @@ namespace Microsoft.DebugEngineHost
         {
             throw new NotImplementedException();
         }
-}
+    }
 
-/// <summary>
-/// The host logger returned from HostConfigurationStore.GetLogger.
-/// </summary>
-public sealed class HostLogger
+    /// <summary>
+    /// The host logger returned from HostConfigurationStore.GetLogger.
+    /// </summary>
+    public sealed class HostLogger
     {
         /// <summary>
         /// Callback for programmatic display of log messages
@@ -427,6 +427,21 @@ public sealed class HostLogger
         /// </summary>
         /// <param name="outputMessage">Message to write</param>
         public static void WriteLaunchError(string outputMessage)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Used to pass arguments to initialize the output window
+        /// </summary>
+        /// <param name="commandArgs">command arguments to pass the window</param>
+        /// <param name="useExternalConsole">whether to use an external console</param>
+        /// <param name="success">function to call on success</param>
+        /// <param name="error">function to call on error</param>
+        /// <returns>true if successful</returns>
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1006:DoNotNestGenericTypesInMemberSignatures")]
+        public static bool TryRunInTerminal(IEnumerable<string> commandArgs, bool useExternalConsole, Action<int?> success, Action<string> error)
         {
             throw new NotImplementedException();
         }

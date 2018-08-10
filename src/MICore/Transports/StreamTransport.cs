@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace MICore
 {
-    public abstract class StreamTransport : ITransport
+    public abstract class StreamTransport : ITransport, IDisposable
     {
         private ITransportCallback _callback;
         private Thread _thread;
@@ -232,5 +232,31 @@ namespace MICore
 
         public abstract int ExecuteSyncCommand(string commandDescription, string commandText, int timeout, out string output, out string error);
         public abstract bool CanExecuteCommand();
+
+        #region IDisposable Support
+        private bool disposedValue = false; // To detect redundant calls
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    _reader?.Close();
+                    _writer?.Close();
+                    _callback = null;
+                    _streamReadCancellationTokenSource?.Dispose();
+
+                }
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+        }
+        #endregion
     }
 }

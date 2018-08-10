@@ -2,12 +2,15 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Threading;
+using Microsoft.DebugEngineHost;
 
 namespace MICore
 {
@@ -15,20 +18,20 @@ namespace MICore
     {
         private Process _terminalProcess;
         protected string _title;
-        protected string _initScript;
+        protected string _dbgCmdFifo;
         protected bool _isRoot;
         protected ReadOnlyCollection<EnvironmentEntry> _environment;
 
-        public static TerminalLauncher MakeTerminal(string title, string initScript, ReadOnlyCollection<EnvironmentEntry> environment)
+        public static TerminalLauncher MakeTerminal(string title, string dbgCmdFifo, ReadOnlyCollection<EnvironmentEntry> environment)
         {
             TerminalLauncher terminal = null;
             if (PlatformUtilities.IsLinux())
             {
-                terminal = new LinuxTerminalLauncher(title, initScript, environment);
+                terminal = new LinuxTerminalLauncher(title, dbgCmdFifo, environment);
             }
             else if (PlatformUtilities.IsOSX())
             {
-                terminal = new MacTerminalLauncher(title, initScript, environment);
+                terminal = new MacTerminalLauncher(title, dbgCmdFifo, environment);
             }
             else
             {
@@ -43,46 +46,56 @@ namespace MICore
         protected abstract string GetProcessArgs();
         protected abstract void SetNewProcessEnvironment(ProcessStartInfo processStartInfo);
 
-        protected TerminalLauncher(string title, string initScript, ReadOnlyCollection<EnvironmentEntry> environment)
+        protected TerminalLauncher(string title, string dbgCmdFifo, ReadOnlyCollection<EnvironmentEntry> environment)
         {
             _title = title;
-            _initScript = initScript;
+            _dbgCmdFifo = dbgCmdFifo;
             _environment = environment;
             _isRoot = UnixNativeMethods.GetEUid() == 0;
         }
 
-        public void Launch(string workingDirectory, Logger logger)
+        public void Launch(string workingDirectory, bool useExternalConsole, Action<int?> launchCompleteAction, Logger logger)
         {
-            _terminalProcess = new Process
+            List<string> args = new List<string>();
+            args.Add("bash");
+#if DEBUG
+            args.Add("-x");
+#endif
+            args.Add(_dbgCmdFifo);
+
+            if (!HostOutputWindow.TryRunInTerminal(args, useExternalConsole, launchCompleteAction, (message) => { throw new InvalidOperationException("failed"); }))
             {
-                StartInfo =
+                _terminalProcess = new Process()
                 {
-                    CreateNoWindow = false,
-                    UseShellExecute = false,
-                    WorkingDirectory = workingDirectory,
-                    FileName = GetProcessExecutable(),
-                    Arguments = GetProcessArgs(),
-                    // Redirect stdout and stderr to logging
-                    // or else it will send to the default stdout and stderr
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                }
-            };
+                    StartInfo =
+                    {
+                        CreateNoWindow = false,
+                        UseShellExecute = false,
+                        WorkingDirectory = workingDirectory,
+                        FileName = GetProcessExecutable(),
+                        Arguments = GetProcessArgs(),
+                        // Redirect stdout and stderr to logging
+                        // or else it will send to the default stdout and stderr
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    }
+                };
 
-            _terminalProcess.OutputDataReceived += (sender, e) =>
-            {
-                UnixUtilities.OutputNonEmptyString(e.Data, "term-stdout: ", logger);
-            };
+                _terminalProcess.OutputDataReceived += (sender, e) =>
+                {
+                    UnixUtilities.OutputNonEmptyString(e.Data, "term-stdout: ", logger);
+                };
 
-            _terminalProcess.ErrorDataReceived += (sender, e) =>
-            {
-                UnixUtilities.OutputNonEmptyString(e.Data, "term-stderr:", logger);
-            };
+                _terminalProcess.ErrorDataReceived += (sender, e) =>
+                {
+                    UnixUtilities.OutputNonEmptyString(e.Data, "term-stderr:", logger);
+                };
 
-            SetNewProcessEnvironment(_terminalProcess.StartInfo);
-            _terminalProcess.Start();
-            _terminalProcess.BeginOutputReadLine();
-            _terminalProcess.BeginErrorReadLine();
+                SetNewProcessEnvironment(_terminalProcess.StartInfo);
+                _terminalProcess.Start();
+                _terminalProcess.BeginOutputReadLine();
+                _terminalProcess.BeginErrorReadLine();
+            }
         }
     }
 
@@ -112,7 +125,7 @@ namespace MICore
 
             // NOTE: setEnvironmentScript will either be the empty string or end in a space, so '{2}' and '{3}' can be next to each other.
             string setEnvironmentScript = GetSetEnvironmentScript();
-            return string.Format(CultureInfo.InvariantCulture, "{0} \"{1}\" \"{2}{3}\"", launchScript, _title, setEnvironmentScript, _initScript);
+            return string.Format(CultureInfo.InvariantCulture, "{0} \"{1}\" \"{2}{3}\"", launchScript, _title, setEnvironmentScript, _dbgCmdFifo);
         }
 
         private string GetSetEnvironmentScript()
@@ -173,8 +186,8 @@ namespace MICore
         private string _terminalPath;
         private string _bashCommandPrefix;
 
-        public LinuxTerminalLauncher(string title, string initScript, ReadOnlyCollection<EnvironmentEntry> environment)
-            : base(title, initScript, environment)
+        public LinuxTerminalLauncher(string title, string dbgCmdFifo, ReadOnlyCollection<EnvironmentEntry> environment)
+            : base(title, dbgCmdFifo, environment)
         {
             if (File.Exists(GnomeTerminalPath))
             {
@@ -202,7 +215,7 @@ namespace MICore
 
         protected override string GetProcessArgs()
         {
-            string terminalArguments = String.Format(CultureInfo.InvariantCulture, "{0} bash -c \"{1}\"", _bashCommandPrefix, _initScript);
+            string terminalArguments = String.Format(CultureInfo.InvariantCulture, "{0} bash \"{1}\"", _bashCommandPrefix, _dbgCmdFifo);
             return !_isRoot ? terminalArguments : String.Concat(_terminalPath, " ", terminalArguments);
         }
 

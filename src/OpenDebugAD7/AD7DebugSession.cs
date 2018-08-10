@@ -538,7 +538,7 @@ namespace OpenDebugAD7
             HostTelemetry.InitializeTelemetry(SendTelemetryEvent, engineType, m_engineConfiguration.AdapterId);
             DebuggerTelemetry.InitializeTelemetry(Protocol.SendEvent, engineType, typeof(Host).GetTypeInfo(), m_engineConfiguration.AdapterId);
 
-            HostOutputWindow.InitializeLaunchErrorCallback((error) => m_logger.WriteLine(LoggingCategory.DebuggerError, error));
+            HostOutputWindow.RegisterLaunchErrorCallback((error) => m_logger.WriteLine(LoggingCategory.DebuggerError, error));
 
             m_engineLaunch = (IDebugEngineLaunch2)m_engine;
             m_engine.SetRegistryRoot(m_engineConfiguration.AdapterId);
@@ -550,6 +550,28 @@ namespace OpenDebugAD7
 
             // Default is that they are URIs
             m_pathConverter.ClientPathsAreURI = !(arguments.PathFormat.GetValueOrDefault(InitializeArguments.PathFormatValue.Unknown) == InitializeArguments.PathFormatValue.Path);
+
+            // If the UI supports RunInTerminal, then register the callback.
+            if (arguments.SupportsRunInTerminalRequest.GetValueOrDefault(false))
+            {
+                HostOutputWindow.RegisterRunInTerminalCallback((commandArgs, useExternalConsole, success, error) =>
+                {
+                    RunInTerminalRequest request = new RunInTerminalRequest() { Arguments = commandArgs.ToList<string>(), Kind = useExternalConsole ? RunInTerminalArguments.KindValue.External : RunInTerminalArguments.KindValue.Integrated, Title = "" };
+
+                    Protocol.SendClientRequest(
+                        request,
+                        (args, response) =>
+                        {
+                            success(response.ProcessId);
+                        },
+                        (args, exception) =>
+                        {
+                            new OutputEvent() { Category = OutputEvent.CategoryValue.Stderr, Output = exception.ToString() };
+                            Protocol.SendEvent(new TerminatedEvent());
+                            error(exception.ToString());
+                        });
+                });
+            }
 
             InitializeResponse initializeResponse = new InitializeResponse()
             {

@@ -34,6 +34,7 @@ namespace MICore
         /// <param name="dbgStdInName">File where the stdin for the debugger process is redirected to</param>
         /// <param name="dbgStdOutName">File where the stdout for the debugger process is redirected to</param>
         /// <param name="pidFifo">File where the debugger pid is written to</param>
+        /// <param name="dbgCmdFifo">File where the debugger's command to run is written to</param>
         /// <param name="debuggerCmd">Command to the debugger</param>
         /// <param name="debuggerArgs">MIDebugger arguments</param>
         /// <returns></returns>
@@ -42,6 +43,7 @@ namespace MICore
             string dbgStdInName,
             string dbgStdOutName,
             string pidFifo,
+            string dbgCmdFifo,
             string debuggerCmd,
             string debuggerArgs)
         {
@@ -52,26 +54,27 @@ namespace MICore
             string waitForCompletionCommand = PlatformUtilities.IsOSX() ? "fg > /dev/null; " : "wait $pid; ";
 
             return string.Format(CultureInfo.InvariantCulture,
-                // echo the shell pid so that we can monitor it
-                "echo $$ > {3}; " +
+                ";" + // first command isn't recognized sometimes so adding an empty command
+                "echo $$ > {3}; " + // echo the shell pid so that we can monitor it
                 "cd {0}; " +
                 "DbgTerm=`tty`; " +
-                "trap 'rm {1} {2} {3}' EXIT; " +
-                "{4} {6} --tty=$DbgTerm < {1} > {2} & " +
+                "trap 'rm {1} {2} {3} {4}' EXIT; " +
+                "{5} {7} --tty=$DbgTerm < {1} > {2} & " +
                 // Clear the output of executing a process in the background: [job number] pid
-                "clear; " +
+                // "clear; " +
                 // echo and wait the debugger pid to know whether
                 // we need to fake an exit by the debugger
                 "pid=$! ; " +
-                "echo $pid > {3}; " +
-                "{5}",
+                "echo $pid >> {3}; " +
+                "{6}",
                 debuggeeDir, /* 0 */
                 dbgStdInName, /* 1 */
                 dbgStdOutName, /* 2 */
                 pidFifo, /* 3 */
-                debuggerCmd, /* 4 */
-                waitForCompletionCommand, /* 5 */
-                debuggerArgs /* 6 */
+                dbgCmdFifo, /* 4 */
+                debuggerCmd, /* 5 */
+                waitForCompletionCommand, /* 6 */
+                debuggerArgs /* 7 */
                 );
         }
 
