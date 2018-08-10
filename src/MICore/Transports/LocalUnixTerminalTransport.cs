@@ -17,7 +17,7 @@ namespace MICore
         private string _dbgStdOutName;
         private string _pidFifo;
         private FileStream _pidStream;
-        private string _dbgCmdFifo;
+        private string _dbgCmdFile;
         private int _debuggerPid = -1;
         private ProcessMonitor _shellProcessMonitor;
         private CancellationTokenSource _streamReadPidCancellationTokenSource = new CancellationTokenSource();
@@ -49,19 +49,19 @@ namespace MICore
             _dbgStdInName = UnixUtilities.MakeFifo(Logger);
             _dbgStdOutName = UnixUtilities.MakeFifo(Logger);
             _pidFifo = UnixUtilities.MakeFifo(Logger);
-            _dbgCmdFifo = Path.Combine(Path.GetTempPath(), UnixUtilities.FifoPrefix + Path.GetRandomFileName());
+            _dbgCmdFile = Path.Combine(Path.GetTempPath(), UnixUtilities.FifoPrefix + Path.GetRandomFileName());
 
             // Used for testing
             Logger?.WriteLine(string.Concat("TempFile=", _dbgStdInName));
             Logger?.WriteLine(string.Concat("TempFile=", _dbgStdOutName));
             Logger?.WriteLine(string.Concat("TempFile=", _pidFifo));
-            Logger?.WriteLine(string.Concat("TempFile=", _dbgCmdFifo));
+            Logger?.WriteLine(string.Concat("TempFile=", _dbgCmdFile));
 
             // Setup the streams on the fifos as soon as possible.
             FileStream dbgStdInStream = new FileStream(_dbgStdInName, FileMode.Open);
             FileStream dbgStdOutStream = new FileStream(_dbgStdOutName, FileMode.Open);
             _pidStream = new FileStream(_pidFifo, FileMode.Open);
-            FileStream dbgCmdStream = new FileStream(_dbgCmdFifo, FileMode.CreateNew);
+            FileStream dbgCmdStream = new FileStream(_dbgCmdFile, FileMode.CreateNew);
 
             string debuggerCmd = UnixUtilities.GetDebuggerCommand(localOptions);
             string launchDebuggerCommand = UnixUtilities.LaunchLocalDebuggerCommand(
@@ -69,12 +69,13 @@ namespace MICore
                 _dbgStdInName,
                 _dbgStdOutName,
                 _pidFifo,
-                _dbgCmdFifo,
+                _dbgCmdFile,
                 debuggerCmd,
                 localOptions.GetMiDebuggerArgs());
 
-            using (StreamWriter dbgCmdWriter = new StreamWriter(dbgCmdStream, Encoding.UTF8))
+            using (StreamWriter dbgCmdWriter = new StreamWriter(dbgCmdStream, new UTF8Encoding(false)))
             {
+                dbgCmdWriter.NewLine = Environment.NewLine;
                 dbgCmdWriter.Write(launchDebuggerCommand);
                 dbgCmdWriter.Flush();
                 dbgCmdWriter.Close();
@@ -86,7 +87,7 @@ namespace MICore
                 localOptions.Environment :
                 new ReadOnlyCollection<EnvironmentEntry>(new EnvironmentEntry[] { }); ;
 
-            TerminalLauncher terminal = TerminalLauncher.MakeTerminal("DebuggerTerminal", _dbgCmdFifo, localOptions.Environment);
+            TerminalLauncher terminal = TerminalLauncher.MakeTerminal("DebuggerTerminal", _dbgCmdFile, localOptions.Environment);
             terminal.Launch(debuggeeDir, _useExternalConsole, ContinueStart, Logger);
             // The in/out names are confusing in this case as they are relative to gdb.
             // What that means is the names are backwards wrt miengine hence the reader

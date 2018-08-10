@@ -556,7 +556,12 @@ namespace OpenDebugAD7
             {
                 HostOutputWindow.RegisterRunInTerminalCallback((commandArgs, useExternalConsole, success, error) =>
                 {
-                    RunInTerminalRequest request = new RunInTerminalRequest() { Arguments = commandArgs.ToList<string>(), Kind = useExternalConsole ? RunInTerminalArguments.KindValue.External : RunInTerminalArguments.KindValue.Integrated, Title = "" };
+                    RunInTerminalRequest request = new RunInTerminalRequest()
+                    {
+                        Arguments = commandArgs.ToList<string>(),
+                        Kind = useExternalConsole ? RunInTerminalArguments.KindValue.External : RunInTerminalArguments.KindValue.Integrated,
+                        Title = "Boo"
+                    };
 
                     Protocol.SendClientRequest(
                         request,

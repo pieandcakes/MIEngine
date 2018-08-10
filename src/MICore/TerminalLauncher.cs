@@ -58,10 +58,12 @@ namespace MICore
         {
             List<string> args = new List<string>();
             args.Add("bash");
-#if DEBUG
-            args.Add("-x");
-#endif
+//#if DEBUG
+//            args.Add("-x");
+//#endif
             args.Add(_dbgCmdFifo);
+            //args.Add(">/dev/null");
+            //args.Add("2>&1");
 
             if (!HostOutputWindow.TryRunInTerminal(args, useExternalConsole, launchCompleteAction, (message) => { throw new InvalidOperationException("failed"); }))
             {

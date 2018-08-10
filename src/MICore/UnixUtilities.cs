@@ -54,14 +54,12 @@ namespace MICore
             string waitForCompletionCommand = PlatformUtilities.IsOSX() ? "fg > /dev/null; " : "wait $pid; ";
 
             return string.Format(CultureInfo.InvariantCulture,
-                ";" + // first command isn't recognized sometimes so adding an empty command
                 "echo $$ > {3}; " + // echo the shell pid so that we can monitor it
                 "cd {0}; " +
                 "DbgTerm=`tty`; " +
-                "trap 'rm {1} {2} {3} {4}' EXIT; " +
+                // Remove the files we created through trap but hide output
+                "trap 'rm {1} {2} {3} {4}' EXIT >/dev/null; " +
                 "{5} {7} --tty=$DbgTerm < {1} > {2} & " +
-                // Clear the output of executing a process in the background: [job number] pid
-                // "clear; " +
                 // echo and wait the debugger pid to know whether
                 // we need to fake an exit by the debugger
                 "pid=$! ; " +
