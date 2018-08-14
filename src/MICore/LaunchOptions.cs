@@ -463,7 +463,7 @@ namespace MICore
         /// Generates arguments for the MIDebuggerCommand. 
         /// </summary>
         /// <returns></returns>
-        public string GetMiDebuggerArgs()
+        public string GetMIDebuggerArgs()
         {
             string miDebuggerArgs = "--interpreter=mi";
 

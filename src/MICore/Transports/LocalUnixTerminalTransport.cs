@@ -71,7 +71,7 @@ namespace MICore
                 _pidFifo,
                 _dbgCmdFile,
                 debuggerCmd,
-                localOptions.GetMiDebuggerArgs());
+                localOptions.GetMIDebuggerArgs());
 
             using (StreamWriter dbgCmdWriter = new StreamWriter(dbgCmdStream, new UTF8Encoding(false)))
             {
