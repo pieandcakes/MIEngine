@@ -79,6 +79,15 @@ namespace Microsoft.SSHDebugPS {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Local Machine.
+        /// </summary>
+        public static string LocalMachine {
+            get {
+                return ResourceManager.GetString("LocalMachine", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Remote Connection.
         /// </summary>
         public static string RemoteConnectionStringLabel {

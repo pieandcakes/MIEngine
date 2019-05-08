@@ -123,6 +123,9 @@
   <data name="IsLocalConnectionLabel" xml:space="preserve">
     <value>Local Connection</value>
   </data>
+  <data name="LocalMachine" xml:space="preserve">
+    <value>Local Machine</value>
+  </data>
   <data name="RemoteConnectionStringLabel" xml:space="preserve">
     <value>Remote Connection</value>
   </data>

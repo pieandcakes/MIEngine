@@ -17,11 +17,13 @@ namespace Microsoft.SSHDebugPS
     {
         public ContainerPickerViewModel()
         {
-
+            // Add the default local machine
+            this.connections.Add(new LocalConnectionViewModel());
         }
 
         #region Properties
-        internal ObservableCollection<IConnection> RemoteConnections { get; }
+        private List<IConnectionViewModel> connections = new List<IConnectionViewModel>();
+        internal ObservableCollection<IConnectionViewModel> Connections { get; }
 
         private List<DockerContainerInstance> dockerContainers = new List<DockerContainerInstance>();
         internal ObservableCollection<DockerContainerInstance> DockerContainers { get; }
