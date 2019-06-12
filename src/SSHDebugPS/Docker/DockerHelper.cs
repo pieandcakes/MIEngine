@@ -21,7 +21,7 @@ namespace Microsoft.SSHDebugPS.Docker
         public static IEnumerable<IContainerInstance> GetLocalDockerContainers()
         {
             List<DockerContainerInstance> containers = new List<DockerContainerInstance>();
-            LocalSingleCommandRunner commandRunner = new LocalSingleCommandRunner(dockerCommand, dockerPSArgs);
+            LocalCommandRunner commandRunner = new LocalCommandRunner(dockerCommand, dockerPSArgs);
             StringBuilder errorSB = new StringBuilder();
             int? exitCode = null;
 
@@ -56,7 +56,7 @@ namespace Microsoft.SSHDebugPS.Docker
                     }
                 });
 
-                commandRunner.Run();
+                commandRunner.Start();
                 // TODO: Switch to cancellable wait
                 resetEvent.WaitOne();
 

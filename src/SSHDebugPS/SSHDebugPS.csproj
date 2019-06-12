@@ -125,7 +125,7 @@
     <Compile Include="Docker\DockerHelper.cs" />
     <Compile Include="Docker\DockerConnection.cs" />
     <Compile Include="SSH\SSHHelper.cs" />
-    <Compile Include="UI\Commands\AddConnectionCommand.cs" />
+    <Compile Include="UI\Commands\ContainerUICommand.cs" />
     <Compile Include="UI\ViewModels\ContainerPickerViewModel.cs" />
     <Compile Include="UI\Converters\BoolToVisibilityConverter.cs" />
     <Compile Include="UI\ContainerInstance.cs" />

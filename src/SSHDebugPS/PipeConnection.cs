@@ -75,9 +75,9 @@ namespace Microsoft.SSHDebugPS
             if (_outerConnection == null)
             {
                 if (isCommandShell)
-                    rawShell = new LocalRawCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
+                    rawShell = new LocalCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
                 else
-                    rawShell = new LocalBufferedCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
+                    rawShell = new RawLocalCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
             }
             else
             {
@@ -180,12 +180,21 @@ namespace Microsoft.SSHDebugPS
             TryGetUsername(out username);
 
             string commandOutput;
+            int exitCode;
 
             if (!ExecuteCommand(PSOutputParser.PSCommandLine, Timeout.Infinite, false, out commandOutput))
             {
-                if (!ExecuteCommand(PSOutputParser.AltPSCommandLine, Timeout.Infinite, false, out commandOutput))
+                if (!ExecuteCommand(PSOutputParser.AltPSCommandLine, Timeout.Infinite, false, out commandOutput, out exitCode))
                 {
-                    throw new CommandFailedException(StringResources.Error_PSFailed);
+                    if (exitCode == 127)
+                    {
+                        //command doesn't Exist
+                        throw new CommandFailedException(StringResources.Error_PSFailed);
+                    }
+                    else
+                    {
+                        throw new CommandFailedException(StringResources.Error_PSFailed);
+                    }
                 }
             }
 
@@ -196,10 +205,10 @@ namespace Microsoft.SSHDebugPS
         /// Checks command exit code and if it is non-zero, it will throw a CommandFailedException with an error message if 'throwOnFailure' is true.
         /// </summary>
         /// <returns>true if command succeeded.</returns>
-        protected bool ExecuteCommand(string command, int timeout, bool throwOnFailure, out string commandOutput)
+        protected bool ExecuteCommand(string command, int timeout, bool throwOnFailure, out string commandOutput, out int exitCode)
         {
             commandOutput = string.Empty;
-            int exitCode = ExecuteCommand(command, timeout, out commandOutput);
+            exitCode = ExecuteCommand(command, timeout, out commandOutput);
             if (throwOnFailure && exitCode != 0)
             {
                 string error = String.Format(CultureInfo.InvariantCulture, StringResources.CommandFailedMessageFormat, command, exitCode, commandOutput);
@@ -208,5 +217,13 @@ namespace Microsoft.SSHDebugPS
             else
                 return exitCode == 0;
         }
+
+        protected bool ExecuteCommand(string command, int timeout, bool throwOnFailure, out string commandOutput)
+        {
+            int exitCode;
+            return ExecuteCommand(command, timeout, throwOnFailure, out commandOutput, out exitCode);
+        }
+
+
     }
 }
