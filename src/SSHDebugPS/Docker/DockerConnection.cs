@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using Microsoft.SSHDebugPS.Utilities;
 using Microsoft.VisualStudio.Debugger.Interop.UnixPortSupplier;
 
 namespace Microsoft.SSHDebugPS.Docker
@@ -13,11 +14,42 @@ namespace Microsoft.SSHDebugPS.Docker
     internal class DockerConnection : PipeConnection
     {
         private string _containerName;
+        private readonly DockerExecutionManager _dockerExecutionManager;
 
-        public DockerConnection(DockerTransportSettings settings, Connection outerConnection, string name, string containerName)
+        internal new DockerContainerTransportSettings TransportSettings => (DockerContainerTransportSettings)base.TransportSettings;
+
+        public DockerConnection(DockerContainerTransportSettings settings, Connection outerConnection, string name, string containerName)
         : base(settings, outerConnection, name)
         {
             _containerName = containerName;
+            _dockerExecutionManager = new DockerExecutionManager(settings, outerConnection);
+        }
+
+        public override int ExecuteCommand(string commandText, int timeout, out string commandOutput)
+        {
+            return _dockerExecutionManager.ExecuteCommand(commandText, timeout, out commandOutput);
+        }
+
+        private ICommandRunner GetExecCommandRunner(string commandText, bool isRawOutput = false)
+        {
+            var execSettings = new DockerExecSettings(this.TransportSettings, commandText);
+
+            return GetCommandRunner(execSettings, isRawOutput);
+        }
+
+        private ICommandRunner GetCommandRunner(DockerContainerTransportSettings settings, bool isRawOutput = false)
+        {
+            if (OuterConnection == null)
+            {
+                if (isRawOutput)
+                {
+                    return new RawLocalCommandRunner(settings);
+                }
+                else
+                    return new LocalCommandRunner(settings);
+            }
+            else
+                return new RemoteCommandRunner(settings, OuterConnection);
         }
 
         public override void BeginExecuteAsyncCommand(string commandText, bool runInShell, IDebugUnixShellCommandCallback callback, out IDebugUnixShellAsyncCommand asyncCommand)
@@ -27,19 +59,14 @@ namespace Microsoft.SSHDebugPS.Docker
                 throw new ObjectDisposedException(nameof(PipeConnection));
             }
 
+            var commandRunner = GetExecCommandRunner(commandText, runInShell);
             if (runInShell)
             {
-                AD7UnixAsyncShellCommand command = new AD7UnixAsyncShellCommand(CreateShellFromSettings(TransportSettings, OuterConnection), callback, closeShellOnComplete: true);
-                command.Start(commandText);
-
-                asyncCommand = command;
+                asyncCommand = new AD7UnixAsyncShellCommand(commandRunner, callback, closeShellOnComplete: true);
             }
             else
             {
-                DockerExecSettings settings = new DockerExecSettings(_containerName, commandText, true);
-                AD7UnixAsyncCommand command = new AD7UnixAsyncCommand(CreateShellFromSettings(settings, OuterConnection, true), callback, closeShellOnComplete: true);
-
-                asyncCommand = command;
+                asyncCommand = new AD7UnixAsyncCommand(commandRunner, callback, closeShellOnComplete: true);
             }
         }
 
@@ -57,18 +84,18 @@ namespace Microsoft.SSHDebugPS.Docker
             {
                 tmpFile = "/tmp" + "/" + StringResources.CopyFile_TempFilePrefix + Guid.NewGuid();
                 OuterConnection.CopyFile(sourcePath, tmpFile);
-                settings = new DockerCopySettings(tmpFile, destinationPath, _containerName, true);
+                settings = new DockerCopySettings(TransportSettings, tmpFile, destinationPath);
             }
             else
             {
-                settings = new DockerCopySettings(sourcePath, destinationPath, _containerName, true);
+                settings = new DockerCopySettings(TransportSettings, sourcePath, destinationPath);
             }
 
-            ICommandRunner shell = CreateShellFromSettings(settings, OuterConnection);
+            ICommandRunner runner = GetCommandRunner(settings);
 
             ManualResetEvent resetEvent = new ManualResetEvent(false);
             int exitCode = -1;
-            shell.Closed += (e, args) =>
+            runner.Closed += (e, args) =>
             {
                 exitCode = args;
                 resetEvent.Set();
@@ -95,13 +122,17 @@ namespace Microsoft.SSHDebugPS.Docker
             }
         }
 
+        // Execute a command and wait for a response. No more interaction
         public override void ExecuteSyncCommand(string commandDescription, string commandText, out string commandOutput, int timeout, out int exitCode)
         {
             int exit = -1;
             string output = string.Empty;
+
+            var settings = new DockerExecSettings(TransportSettings, commandText, makeInteractive: false);
+            var runner = GetCommandRunner(settings, true);
             if (OuterConnection != null)
             {
-                string dockerCommand = string.Format(CultureInfo.InvariantCulture, StringResources.DockerExecCommandFormat, _containerName, commandText);
+                string dockerCommand = "{0} {1}".FormatInvariantWithArgs(settings.Command, settings.CommandArgs);
                 string waitMessage = string.Format(CultureInfo.InvariantCulture, StringResources.WaitingOp_ExecutingCommand, commandDescription);
                 VS.VSOperationWaiter.Wait(waitMessage, true, () =>
                 {

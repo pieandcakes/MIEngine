@@ -16,16 +16,6 @@ using Microsoft.VisualStudio.Shell.Interop;
 
 namespace Microsoft.SSHDebugPS
 {
-    internal interface ICommandRunner : IDisposable
-    {
-        event EventHandler<string> OutputReceived;
-        event EventHandler<int> Closed;
-        event EventHandler<ErrorOccuredEventArgs> ErrorOccured;
-
-        void Write(string text);
-        void WriteLine(string text);
-    }
-
     internal class ErrorOccuredEventArgs : EventArgs
     {
         public ErrorOccuredEventArgs(Exception e)
@@ -36,26 +26,35 @@ namespace Microsoft.SSHDebugPS
         public Exception Exception { get; }
     }
 
-    interface ILocalCommandRunner : ICommandRunner
+    internal interface ICommandRunner : IDisposable
     {
+        event EventHandler<string> OutputReceived;
+        event EventHandler<int> Closed;
+        event EventHandler<ErrorOccuredEventArgs> ErrorOccured;
+
         void Start();
-        void Start(string command, string commandArgs);
+
+        void Write(string text);
+        void WriteLine(string text);
     }
 
     /// <summary>
     /// Run a single command on Windows. This reads output as ReadLine. Run needs to be called to run the command.
     /// </summary>
-    internal class LocalCommandRunner : ILocalCommandRunner
+    internal class LocalCommandRunner : ICommandRunner
     {
-        public static int BUFMAX = 4896;
+        public static int BUFMAX = 4096;
 
         private ProcessStartInfo _processStartInfo;
         private System.Diagnostics.Process _process;
         private CancellationTokenSource _cancellationSource = new CancellationTokenSource();
         private System.Threading.Tasks.Task _outputReadLoopTask;
+        private System.Threading.Tasks.Task _errorReadLoopTask;
+        private bool _hasExited = false;
+
         private StreamWriter _stdInWriter;
         private StreamReader _stdOutReader;
-        private bool _hasExited = false;
+        private StreamReader _stdErrReader;
 
         protected object _lock = new object();
 
@@ -63,12 +62,15 @@ namespace Microsoft.SSHDebugPS
         public event EventHandler<int> Closed;
         public event EventHandler<ErrorOccuredEventArgs> ErrorOccured;
 
-        public LocalCommandRunner()
+        public LocalCommandRunner(IPipeTransportSettings settings, bool runImmediately = true)
+            : this(settings.Command, settings.CommandArgs, runImmediately)
         { }
 
-        public LocalCommandRunner(string command, string commandArgs)
+        public LocalCommandRunner(string command, string commandArgs, bool runImmediately = true)
         {
             CreateProcessStartInfo(command, commandArgs);
+            if (runImmediately)
+                Start();
         }
 
         public void Start()
@@ -102,11 +104,10 @@ namespace Microsoft.SSHDebugPS
 
             _stdInWriter = new StreamWriter(_process.StandardInput.BaseStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), BUFMAX);
             _stdOutReader = new StreamReader(_process.StandardOutput.BaseStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), false, BUFMAX);
+            _stdErrReader = new StreamReader(_process.StandardError.BaseStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), false, BUFMAX);
 
-            _outputReadLoopTask = System.Threading.Tasks.Task.Run(() => ReadLoop(_stdOutReader, _cancellationSource.Token, OnOutputReceived));
-
-            _process.ErrorDataReceived += OnErrorOutput;
-            _process.BeginErrorReadLine();
+            _outputReadLoopTask = System.Threading.Tasks.Task.Run(() => ReadLoop(_stdOutReader, _cancellationSource.Token, checkForExitedProcess: true, OnOutputReceived));
+            _errorReadLoopTask = System.Threading.Tasks.Task.Run(() => ReadLoop(_stdErrReader, _cancellationSource.Token, checkForExitedProcess: false, OnErrorReceived));
         }
 
         public void Start(string command, string commandArgs)
@@ -144,15 +145,6 @@ namespace Microsoft.SSHDebugPS
             ErrorOccured?.Invoke(this, new ErrorOccuredEventArgs(ex));
         }
 
-
-        protected virtual void OnErrorOutput(object sender, DataReceivedEventArgs e)
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-            {
-                ErrorOccured?.Invoke(this, new ErrorOccuredEventArgs(new Exception(e.Data)));
-            }
-        }
-
         protected virtual void OnProcessExited(object sender, EventArgs args)
         {
             lock (_lock)
@@ -164,6 +156,11 @@ namespace Microsoft.SSHDebugPS
                     Closed?.Invoke(this, _process.ExitCode);
                 }
             }
+        }
+
+        protected virtual void OnErrorReceived(string error)
+        {
+            ErrorOccured?.Invoke(this, new ErrorOccuredEventArgs(new Exception(error)));
         }
 
         protected virtual void OnOutputReceived(string line)
@@ -201,24 +198,26 @@ namespace Microsoft.SSHDebugPS
             _processStartInfo.CreateNoWindow = true;
         }
 
-        protected virtual void ReadLoop(StreamReader reader, CancellationToken token, Action<string> action)
+        protected virtual void ReadLoop(StreamReader reader, CancellationToken token, bool checkForExitedProcess, Action<string> action)
         {
             try
             {
                 while (!token.IsCancellationRequested)
                 {
-                    char[] buffer = new char[BUFMAX];
                     Task<string> task = reader.ReadLineAsync();
                     task.Wait(token);
 
-                    if (task.Result == null)
+                    if (task.Result == null || token.IsCancellationRequested)
                     {
-                        lock (_lock)
+                        if (checkForExitedProcess)
                         {
-                            if (!_hasExited && _process.HasExited)
+                            lock (_lock)
                             {
-                                _hasExited = true;
-                                Closed?.Invoke(this, _process.ExitCode);
+                                if (!_hasExited && _process.HasExited)
+                                {
+                                    _hasExited = true;
+                                    Closed?.Invoke(this, _process.ExitCode);
+                                }
                             }
                         }
                         return; // end of stream
@@ -229,7 +228,7 @@ namespace Microsoft.SSHDebugPS
             }
             catch (Exception e)
             {
-                ErrorOccured?.Invoke(this, new ErrorOccuredEventArgs(e));
+                ReportException(e);
                 Dispose();
             }
         }
@@ -245,19 +244,31 @@ namespace Microsoft.SSHDebugPS
             {
                 lock (_lock)
                 {
-                    if (!_process.HasExited)
+                    if (_process != null)
                     {
-                        _process.Kill();
+                        if (!_process.HasExited)
+                        {
+                            _process.Kill();
+                        }
+
+                        // clean up event handlers.
+                        _process.Exited -= OnProcessExited;
+                        _process = null;
+
+                        _cancellationSource.Cancel();
+
+                        _outputReadLoopTask = null;
+                        _errorReadLoopTask = null;
+
+                        _stdInWriter.Close();
+                        _stdInWriter = null;
+
+                        _stdOutReader.Close();
+                        _stdOutReader = null;
+
+                        _stdErrReader.Close();
+                        _stdErrReader = null;
                     }
-
-                    _cancellationSource.Cancel();
-
-                    _outputReadLoopTask = null;
-                    _stdInWriter = null;
-                    _stdOutReader = null;
-
-                    // clean up event handlers.
-                    _process = null;
                 }
             }
         }
@@ -281,24 +292,12 @@ namespace Microsoft.SSHDebugPS
             }
         }
 
-
-        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-        // ~LocalCommandRunnerBase()
-        // {
-        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-        //   Dispose(false);
-        // }
-
-        // This code added to correctly implement the disposable pattern.
         public void Dispose()
         {
             // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
             Dispose(true);
-            // TODO: uncomment the following line if the finalizer is overridden above.
-            // GC.SuppressFinalize(this);
         }
         #endregion
-
     }
 
     /// <summary>
@@ -308,7 +307,9 @@ namespace Microsoft.SSHDebugPS
     {
         public RawLocalCommandRunner(string command, string args) : base(command, args) { }
 
-        protected override void ReadLoop(StreamReader reader, CancellationToken token, Action<string> action)
+        public RawLocalCommandRunner(IPipeTransportSettings settings) : base(settings) { }
+
+        protected override void ReadLoop(StreamReader reader, CancellationToken token, bool something, Action<string> action)
         {
             try
             {
@@ -330,14 +331,6 @@ namespace Microsoft.SSHDebugPS
         }
     }
 
-    internal class DockerCommandRunner : LocalCommandRunner
-    {
-        public DockerCommandRunner(DockerTransportSettings settings)
-        {
-            // process the exe command, host name 
-        }
-    }
-
     /// <summary>
     ///  Shell that uses a remote Connection to send commands and receive input/output
     /// </summary>
@@ -345,11 +338,22 @@ namespace Microsoft.SSHDebugPS
     {
         private IDebugUnixShellAsyncCommand _asyncCommand;
         private bool _isRunning;
+        private string _commandText;
+        private Connection _remoteConnection;
+
+        public RemoteCommandRunner(IPipeTransportSettings settings, Connection remoteConnection)
+            : this(settings.Command, settings.CommandArgs, remoteConnection)
+        { }
 
         public RemoteCommandRunner(string command, string arguments, Connection remoteConnection)
         {
-            string commandText = string.Concat(command, " ", arguments);
-            remoteConnection.BeginExecuteAsyncCommand(commandText, runInShell: false, callback: this, asyncCommand: out _asyncCommand);
+            _remoteConnection = remoteConnection;
+            _commandText = string.Concat(command, " ", arguments);
+        }
+
+        public void Start()
+        {
+            _remoteConnection.BeginExecuteAsyncCommand(_commandText, runInShell: false, callback: this, asyncCommand: out _asyncCommand);
             _isRunning = true;
         }
 

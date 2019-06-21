@@ -21,39 +21,26 @@ namespace Microsoft.SSHDebugPS
                 return null;
 
             Connection remoteConnection = null;
-            DockerTransportSettings settings = null;
-            // Assume format is <server>/<container> where if <server> is specified, it is for SSH
+            DockerContainerTransportSettings settings = null;
+
+            string containerName;
+            string dockerString;
+            string hostName = string.Empty;
+
+            // Assume format is <server>/<hostname>::<container> where if <server> is specified, it is for SSH
             string[] connectionStrings = name.Split('/');
 
-            string displayName;
-            string containerName;
-
-            if (connectionStrings.Length == 1)
-            {
-                // local connection
-                containerName = connectionStrings[0];
-                settings = new DockerExecShellSettings(containerName, hostIsUnix: false);
-                displayName = name;
-                // TODO: Verify container exists on local machine
-            }
-            else if (connectionStrings.Length == 2)
+            if (connectionStrings.Length == 2)
             {
                 // SSH connection
                 string remoteConnectionString = connectionStrings[0];
-                containerName = connectionStrings[1];
+                dockerString = connectionStrings[1];
                 remoteConnection = GetSSHConnection(remoteConnectionString);
-
-                // If SSH connection dialog was cancelled, we should cancel this connection.
-                if (remoteConnection == null)
-                    return null;
-
-                // TODO: Verify container exists on remote machine.
-                //string output;
-                //int exitCode;
-                //remoteConnection.ExecuteSyncCommand("verify docker exists", $"docker ps -f {containerName} --filter {{.Names}}", out output, , out exitCode);
-
-                settings = new DockerExecShellSettings(containerName, hostIsUnix: true); // assume all remote is Unix for now.
-                displayName = remoteConnection.Name + '/' + containerName;
+            }
+            else if(connectionStrings.Length == 1)
+            {
+                // local connection
+                dockerString = connectionStrings[0];
             }
             else
             {
@@ -61,7 +48,25 @@ namespace Microsoft.SSHDebugPS
                 return null;
             }
 
-            return new DockerConnection(settings, remoteConnection, displayName, containerName);
+            if (!string.IsNullOrWhiteSpace(dockerString))
+            {
+                if (dockerString.Contains("::"))
+                {
+                    int pos = dockerString.IndexOf("::");
+                    hostName = dockerString.Substring(0, pos);
+                    containerName = dockerString.Substring(pos + 2);
+                }
+                else
+                {
+                    containerName = dockerString;
+                }
+
+                settings = new DockerContainerTransportSettings(hostName, containerName, remoteConnection != null);
+                string displayName = remoteConnection != null ? remoteConnection.Name + '/' + dockerString : dockerString;
+                return new DockerConnection(settings, remoteConnection, displayName, containerName);
+            }
+
+            return null;
         }
 
         public static SSHConnection GetSSHConnection(string name)
@@ -96,7 +101,7 @@ namespace Microsoft.SSHDebugPS
                         userName = name.Substring(0, atSignIndex);
 
                         int hostNameStartPos = atSignIndex + 1;
-                        hostName = hostNameStartPos <  name.Length ? name.Substring(hostNameStartPos) : StringResources.HostName_PlaceHolder;
+                        hostName = hostNameStartPos < name.Length ? name.Substring(hostNameStartPos) : StringResources.HostName_PlaceHolder;
                     }
                     else
                     {

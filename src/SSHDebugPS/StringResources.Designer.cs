@@ -151,11 +151,20 @@ namespace Microsoft.SSHDebugPS {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Unable to obtain process listing. &apos;ps&apos; command failed..
+        ///   Looks up a localized string similar to Unable to obtain process listing: &apos;ps&apos; command failed..
         /// </summary>
         internal static string Error_PSFailed {
             get {
                 return ResourceManager.GetString("Error_PSFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unable to obtain process listing: &apos;ps&apos; command missing..
+        /// </summary>
+        internal static string Error_PSMissing {
+            get {
+                return ResourceManager.GetString("Error_PSMissing", resourceCulture);
             }
         }
         

@@ -156,7 +156,10 @@
     <comment>{0} directory name.</comment>
   </data>
   <data name="Error_PSFailed" xml:space="preserve">
-    <value>Unable to obtain process listing. 'ps' command failed.</value>
+    <value>Unable to obtain process listing: 'ps' command failed.</value>
+  </data>
+  <data name="Error_PSMissing" xml:space="preserve">
+    <value>Unable to obtain process listing: 'ps' command missing.</value>
   </data>
   <data name="Error_ShellNotRunning" xml:space="preserve">
     <value>Cannot process command. Connection is not open.</value>

@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 using Microsoft.VisualStudio.Debugger.Interop.UnixPortSupplier;
+using Microsoft.VisualStudio.Shell;
 
 namespace Microsoft.SSHDebugPS
 {
@@ -16,7 +17,6 @@ namespace Microsoft.SSHDebugPS
         private readonly IPipeTransportSettings _settings;
         private readonly Connection _outerConnection;
 
-        private readonly ShellExecutionManager _shellExecutionManager;
         private readonly List<ICommandRunner> _shellList = new List<ICommandRunner>();
         private bool _isClosed;
         private string _name;
@@ -41,17 +41,6 @@ namespace Microsoft.SSHDebugPS
             _name = name;
             _settings = pipeTransportSettings;
             _outerConnection = outerConnection;
-            _shellExecutionManager = new ShellExecutionManager(CreateShellFromSettings(_settings, _outerConnection));
-        }
-
-        public override int ExecuteCommand(string commandText, int timeout, out string commandOutput)
-        {
-            if (_isClosed)
-            {
-                throw new ObjectDisposedException(nameof(PipeConnection));
-            }
-
-            return _shellExecutionManager.ExecuteCommand(commandText, timeout, out commandOutput); ;
         }
 
         public override void Close()
@@ -67,43 +56,6 @@ namespace Microsoft.SSHDebugPS
 
                 _shellList.Clear();
             }
-        }
-
-        internal ICommandRunner CreateShellFromSettings(IPipeTransportSettings settings, Connection outerConnection, bool isCommandShell = false)
-        {
-            ICommandRunner rawShell;
-            if (_outerConnection == null)
-            {
-                if (isCommandShell)
-                    rawShell = new LocalCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
-                else
-                    rawShell = new RawLocalCommandRunner(settings.ExeCommand, settings.ExeCommandArgs);
-            }
-            else
-            {
-                rawShell = new RemoteCommandRunner(settings.ExeCommand, settings.ExeCommandArgs, outerConnection);
-            }
-
-            lock (_lock)
-            {
-                _shellList.Add(rawShell);
-            }
-
-            rawShell.Closed += (sender, eventArgs) =>
-            {
-                if (_isClosed)
-                    return;
-
-                lock (_lock)
-                {
-                    if (_isClosed)
-                        return;
-
-                    _shellList.Remove(rawShell);
-                }
-            };
-
-            return rawShell;
         }
 
         public override string MakeDirectory(string path)
@@ -186,15 +138,23 @@ namespace Microsoft.SSHDebugPS
             {
                 if (!ExecuteCommand(PSOutputParser.AltPSCommandLine, Timeout.Infinite, false, out commandOutput, out exitCode))
                 {
-                    if (exitCode == 127)
+                    string message;
+                    if (exitCode == 126)
                     {
                         //command doesn't Exist
-                        throw new CommandFailedException(StringResources.Error_PSFailed);
+                        message = StringResources.Error_PSMissing;
                     }
                     else
                     {
-                        throw new CommandFailedException(StringResources.Error_PSFailed);
+                        message = StringResources.Error_PSFailed;
                     }
+
+                    VsShellUtilities.ShowMessageBox(ServiceProvider.GlobalProvider,
+                        message,
+                        null,
+                        VisualStudio.Shell.Interop.OLEMSGICON.OLEMSGICON_CRITICAL,
+                        VisualStudio.Shell.Interop.OLEMSGBUTTON.OLEMSGBUTTON_OK,
+                        VisualStudio.Shell.Interop.OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
                 }
             }
 
@@ -223,7 +183,5 @@ namespace Microsoft.SSHDebugPS
             int exitCode;
             return ExecuteCommand(command, timeout, throwOnFailure, out commandOutput, out exitCode);
         }
-
-
     }
 }

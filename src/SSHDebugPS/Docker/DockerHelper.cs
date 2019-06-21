@@ -10,18 +10,26 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.SSHDebugPS.SSH;
+using Microsoft.SSHDebugPS.Utilities;
+using Microsoft.VisualStudio.PlatformUI;
 
 namespace Microsoft.SSHDebugPS.Docker
 {
     public class DockerHelper
     {
-        private const string dockerCommand = "docker";
+        private const string dockerPSCommand = "ps";
         // --no-trunc avoids parameter truncation
-        private const string dockerPSArgs = "ps --no-trunc --format \"{{json .}}\"";
+        private const string dockerPSArgs = "--no-trunc --format \"{{json .}}\"";
         public static IEnumerable<IContainerInstance> GetLocalDockerContainers()
         {
             List<DockerContainerInstance> containers = new List<DockerContainerInstance>();
-            LocalCommandRunner commandRunner = new LocalCommandRunner(dockerCommand, dockerPSArgs);
+
+            // TODO: hook up hostname field
+            var settings = new DockerCommandSettings(string.Empty, false);
+            settings.SetCommand(dockerPSCommand, dockerPSArgs);
+
+            LocalCommandRunner commandRunner = new LocalCommandRunner(settings, false);
+
             StringBuilder errorSB = new StringBuilder();
             int? exitCode = null;
 
@@ -46,19 +54,27 @@ namespace Microsoft.SSHDebugPS.Docker
                         if (args.Trim()[0] != '{')
                         {
                             // output isn't json, command Error
-                            string errorMessage = string.Format(CultureInfo.CurrentCulture, UIResources.CommandExecutionErrorFormat, dockerCommand, args);
-                            throw new CommandFailedException(errorMessage);
+                            //string errorMessage = UIResources.CommandExecutionErrorFormat.FormatCurrentCultureWithArgs("{0} {1}".FormatInvariantWithArgs(settings.Command, settings.CommandArgs), args);
+                            //throw new CommandFailedException(errorMessage);
+                            errorSB.AppendLine(args);
                         }
-
-                        var containerInstance = DockerContainerInstance.Create(args);
-                        if (containerInstance != null)
-                            containers.Add(containerInstance);
+                        else
+                        {
+                            var containerInstance = DockerContainerInstance.Create(args);
+                            if (containerInstance != null)
+                                containers.Add(containerInstance);
+                        }
                     }
                 });
 
                 commandRunner.Start();
-                // TODO: Switch to cancellable wait
-                resetEvent.WaitOne();
+
+                int retry = 10;
+                // TODO: Switch to cancellable wait (retry 10 times)
+                while (!resetEvent.WaitOne(4000) && retry > 0)
+                {
+                    retry--;
+                }
 
                 // might need to throw an exception here too??
                 if (exitCode != 0)
@@ -67,12 +83,17 @@ namespace Microsoft.SSHDebugPS.Docker
                     return null;
                 }
 
+                if (errorSB.Length > 0)
+                {
+                    throw new CommandFailedException(errorSB.ToString());
+                }
+
                 return containers;
             }
             catch (Win32Exception ex)
             {
                 // docker doesn't exist 
-                string errorMessage = string.Format(CultureInfo.CurrentCulture, UIResources.CommandExecutionErrorFormat, dockerCommand, ex.Message);
+                string errorMessage = UIResources.CommandExecutionErrorFormat.FormatCurrentCultureWithArgs(settings.CommandArgs, ex.Message);
                 throw new CommandFailedException(errorMessage, ex);
             }
         }
@@ -88,7 +109,12 @@ namespace Microsoft.SSHDebugPS.Docker
             }
 
             List<DockerContainerInstance> containers = new List<DockerContainerInstance>();
-            RemoteCommandRunner commandRunner = new RemoteCommandRunner(dockerCommand, dockerPSArgs, sshConnection);
+
+            //TODO: Hook up hostname
+            var settings = new DockerCommandSettings(string.Empty, false);
+            settings.SetCommand(dockerPSCommand, dockerPSArgs);
+
+            RemoteCommandRunner commandRunner = new RemoteCommandRunner(settings, sshConnection);
 
             ManualResetEvent resetEvent = new ManualResetEvent(false);
             int exitCode = 0;
@@ -122,6 +148,8 @@ namespace Microsoft.SSHDebugPS.Docker
                 }
             });
 
+            commandRunner.Start();
+
             resetEvent.WaitOne();
 
             if (exitCode != 0)
@@ -129,7 +157,7 @@ namespace Microsoft.SSHDebugPS.Docker
                 // if the exit code is not zero, then the output we received possibly is the error message
                 string exceptionMessage = string.Format(CultureInfo.CurrentCulture,
                     UIResources.CommandExecutionErrorWithExitCodeFormat,
-                    dockerCommand,
+                    "{0} {1}".FormatInvariantWithArgs(settings.Command, settings.CommandArgs),
                     exitCode,
                     errorSB.ToString());
 

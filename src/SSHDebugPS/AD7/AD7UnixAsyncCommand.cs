@@ -80,7 +80,6 @@ namespace Microsoft.SSHDebugPS
         protected void OnError(object sender, ErrorOccuredEventArgs e)
         {
             Callback.OnOutputLine(e.Exception.Message);
-//            Callback.OnExit();
             Close();
         }
 
